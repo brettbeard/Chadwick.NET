@@ -1,10 +1,15 @@
 # Chadwick.NET
 
-A C#/.NET 10 port of `cwbox`, the traditional boxscore generator from the
-[Chadwick](http://chadwick-bureau.com/) baseball play-by-play toolkit. It parses
-Retrosheet DiamondWare play-by-play (`.EVN`/`.EVA`), roster (`.ROS`), and team
-(`TEAM####`) files - directly from a `.zip` archive or from an already-extracted
-directory - and produces a traditional plaintext boxscore for a specified game.
+A C#/.NET 10 port of the [Chadwick](http://chadwick-bureau.com/) baseball
+play-by-play parsing library, currently including a port of the `cwbox`
+command-line utility. It parses Retrosheet DiamondWare play-by-play
+(`.EVN`/`.EVA`), roster (`.ROS`), and team (`TEAM####`) files - directly from a
+`.zip` archive or from an already-extracted directory - and `cwbox` produces a
+traditional plaintext boxscore for a specified game.
+
+Chadwick's other command-line utilities (`cwevent`, `cwgame`, `cwsub`, etc.)
+are not yet ported, but are planned as future additions on top of the same
+parsing library.
 
 ## Attribution
 
