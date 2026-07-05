@@ -30,33 +30,9 @@ namespace Chadwick.NET.Tests.Integration;
 [TestClass]
 public sealed class SeasonDataTests
 {
-    private static string? FindDataDirectory()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(directory.FullName, "data");
-            if (Directory.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            directory = directory.Parent;
-        }
-
-        return null;
-    }
-
     private static string? FindSeasonZipPath(int year)
     {
-        var dataDirectory = FindDataDirectory();
-        if (dataDirectory is null)
-        {
-            return null;
-        }
-
-        var candidate = Path.Combine(dataDirectory, $"{year}eve.zip");
-        return File.Exists(candidate) ? candidate : null;
+        return TestDataLocator.FindDataFile(Path.Combine("play-by-play", $"{year}eve.zip"));
     }
 
     /// <summary>
@@ -92,7 +68,7 @@ public sealed class SeasonDataTests
         var zipPath = FindSeasonZipPath(year);
         if (zipPath is null)
         {
-            Assert.Inconclusive($"Sample data 'data/{year}eve.zip' was not found; skipping season regression test.");
+            Assert.Inconclusive($"Sample data 'data/play-by-play/{year}eve.zip' was not found; skipping season regression test.");
             return;
         }
 
@@ -132,7 +108,7 @@ public sealed class SeasonDataTests
         var zipPath = FindSeasonZipPath(year);
         if (zipPath is null)
         {
-            Assert.Inconclusive($"Sample data 'data/{year}eve.zip' was not found; skipping season regression test.");
+            Assert.Inconclusive($"Sample data 'data/play-by-play/{year}eve.zip' was not found; skipping season regression test.");
             return;
         }
 
@@ -168,7 +144,7 @@ public sealed class SeasonDataTests
         var zipPath = FindSeasonZipPath(1968);
         if (zipPath is null)
         {
-            Assert.Inconclusive("Sample data 'data/1968eve.zip' was not found; skipping season regression test.");
+            Assert.Inconclusive("Sample data 'data/play-by-play/1968eve.zip' was not found; skipping season regression test.");
             return;
         }
 
@@ -198,7 +174,7 @@ public sealed class SeasonDataTests
         var zipPath = FindSeasonZipPath(1967);
         if (zipPath is null)
         {
-            Assert.Inconclusive("Sample data 'data/1967eve.zip' was not found; skipping season regression test.");
+            Assert.Inconclusive("Sample data 'data/play-by-play/1967eve.zip' was not found; skipping season regression test.");
             return;
         }
 
