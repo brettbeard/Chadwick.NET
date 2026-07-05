@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Chadwick.NET.Cwbox": {
+      "commandName": "Project",
+      "commandLineArgs": "data/1968eve.zip 1968 BAL196804100"
+    }
+  }
+}

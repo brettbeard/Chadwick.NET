@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Chadwick.NET.Cwbox/Chadwick.NET.Cwbox.csproj" />
+  <Project Path="Chadwick.NET.Tests/Chadwick.NET.Tests.csproj" />
+  <Project Path="Chadwick.NET/Chadwick.NET.csproj" />
+</Solution>
