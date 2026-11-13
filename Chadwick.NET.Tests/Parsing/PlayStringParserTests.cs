@@ -209,6 +209,58 @@ public sealed class PlayStringParserTests
         Assert.IsNull(play);
     }
 
+    /// <summary>
+    /// A catcher-interference play whose fielding modifier ends in a trailing hyphen parses
+    /// once advances follow. ParseInterference keys its modifier loop on '/' alone, where every
+    /// other event type tolerates the '-'/'+'/'#'/'!' terminators ParseFlag can stop on, so a
+    /// trailing hyphen used to strand the parser before the advances.
+    /// </summary>
+    [TestMethod]
+    public void TryParse_InterferenceWithTrailingHyphenModifierAndAdvances_ParsesTheAdvances()
+    {
+        // BOS202509030: catcher interference, the error and obstruction modifiers, a batted-ball
+        // modifier ending in a trailing hyphen, then three advances.
+        var ok = PlayStringParser.TryParse("C/E2/OBS/G2-.3-H(RBI);2-3;B-1", out var play);
+
+        Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
+        Assert.AreEqual(PlayEventType.Interference, play.EventType);
+        Assert.AreEqual(1, play.Advance[0]); // batter awarded first on the interference
+        Assert.AreEqual(3, play.Advance[2]); // runner on second to third
+        Assert.AreEqual(4, play.Advance[3]); // runner on third scores
+    }
+
+    [TestMethod]
+    [DataRow("C/G2-.3-H", DisplayName = "bare ground-ball modifier with the trailing hyphen")]
+    [DataRow("C/E2/G34-.3-H", DisplayName = "error modifier and a two-fielder location")]
+    public void TryParse_InterferenceWithTrailingHyphenModifier_IsAccepted(string playText)
+    {
+        var ok = PlayStringParser.TryParse(playText, out var play);
+
+        Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
+        Assert.AreEqual(PlayEventType.Interference, play.EventType);
+        Assert.AreEqual(4, play.Advance[3]); // the advance after the hyphenated modifier parses
+    }
+
+    /// <summary>
+    /// The control cases from the report: the same play parsed with no advances, with no trailing
+    /// hyphen, and on a different event type, each of which worked before the fix. They are kept
+    /// so the fix is pinned to the combination rather than masking a regression in one of them.
+    /// </summary>
+    [TestMethod]
+    [DataRow("C/E2/OBS/G2-", DisplayName = "same modifiers, no advances")]
+    [DataRow("C/E2/G2.3-H", DisplayName = "same shape, no trailing hyphen")]
+    [DataRow("S7/G2-.3-H", DisplayName = "same modifier and advances, different event")]
+    [DataRow("S3/G34S-.1-2", DisplayName = "a trailing-hyphen modifier that always parsed")]
+    public void TryParse_TrailingHyphenModifierControlCases_StillParse(string playText)
+    {
+        var ok = PlayStringParser.TryParse(playText, out var play);
+
+        Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
+    }
+
     [TestMethod]
     public void TryParse_UnrecognizedToken_ReturnsFalse()
     {
