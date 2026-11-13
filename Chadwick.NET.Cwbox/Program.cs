@@ -16,6 +16,7 @@ using Chadwick.Core.Boxscores;
 using Chadwick.Core.FileSources;
 using Chadwick.Core.Rosters;
 using Chadwick.Core.Scorebook;
+using Chadwick.Core.Validation;
 using Chadwick.NET.Cwbox;
 
 if (args.Length < 3)
@@ -62,6 +63,22 @@ var game = games.FirstOrDefault(g => g.GameId == gameId);
 if (game is null)
 {
     Console.Error.WriteLine($"Game '{gameId}' was not found in '{eventFileName}'.");
+    return 1;
+}
+
+// Chadwick's cwbox screens a game for internal consistency and skips it rather than printing a
+// boxscore accumulated from play-by-play that is known to be wrong, since the resulting totals
+// would look perfectly ordinary while being off by an unknown amount.
+var problems = GameValidator.Validate(game);
+if (problems.Count > 0)
+{
+    foreach (var problem in problems)
+    {
+        var where = problem.EventNumber > 0 ? $" at event {problem.EventNumber}" : "";
+        Console.Error.WriteLine($"ERROR: In game {game.GameId}{where}: {problem.Description}");
+    }
+
+    Console.Error.WriteLine($"WARNING: Sanity check fails for game {game.GameId}, skipping...");
     return 1;
 }
 

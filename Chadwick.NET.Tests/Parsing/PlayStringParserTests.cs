@@ -26,6 +26,7 @@ public sealed class PlayStringParserTests
         var ok = PlayStringParser.TryParse("S7.2-H;1-3", out var play);
 
         Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
         Assert.AreEqual(PlayEventType.Single, play.EventType);
         Assert.AreEqual(1, play.Advance[0]); // batter to first
         Assert.AreEqual(3, play.Advance[1]); // runner on first to third
@@ -42,6 +43,7 @@ public sealed class PlayStringParserTests
         var ok = PlayStringParser.TryParse("64(1)3/GDP", out var play);
 
         Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
         Assert.AreEqual(PlayEventType.GenericOut, play.EventType);
         Assert.IsTrue(play.DpFlag);
         Assert.IsTrue(play.GdpFlag);
@@ -57,6 +59,7 @@ public sealed class PlayStringParserTests
         var ok = PlayStringParser.TryParse("HR/78/F", out var play);
 
         Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
         Assert.AreEqual(PlayEventType.HomeRun, play.EventType);
         Assert.AreEqual(4, play.Advance[0]);
         Assert.AreEqual(1, play.RbiFlag[0]);
@@ -70,6 +73,7 @@ public sealed class PlayStringParserTests
         var ok = PlayStringParser.TryParse("K", out var play);
 
         Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
         Assert.AreEqual(PlayEventType.Strikeout, play.EventType);
         Assert.AreEqual(1, play.OutsOnPlay);
         CollectionAssert.AreEqual(new[] { 2 }, play.Putouts);
@@ -81,6 +85,7 @@ public sealed class PlayStringParserTests
         var ok = PlayStringParser.TryParse("W", out var play);
 
         Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
         Assert.AreEqual(PlayEventType.Walk, play.EventType);
         Assert.AreEqual(1, play.Advance[0]);
     }
@@ -91,6 +96,7 @@ public sealed class PlayStringParserTests
         var ok = PlayStringParser.TryParse("E6/G6.1-2", out var play);
 
         Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
         Assert.AreEqual(PlayEventType.Error, play.EventType);
         Assert.AreEqual(1, play.Advance[0]);
         Assert.AreEqual(2, play.Advance[1]);
@@ -106,6 +112,7 @@ public sealed class PlayStringParserTests
         var ok = PlayStringParser.TryParse("SB2", out var play);
 
         Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
         Assert.AreEqual(PlayEventType.StolenBase, play.EventType);
         Assert.IsTrue(play.SbFlag[1]);
         Assert.AreEqual(2, play.Advance[1]);
@@ -117,6 +124,7 @@ public sealed class PlayStringParserTests
         var ok = PlayStringParser.TryParse("CS2(26)", out var play);
 
         Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
         Assert.AreEqual(PlayEventType.CaughtStealing, play.EventType);
         Assert.IsTrue(play.CsFlag[1]);
         Assert.AreEqual(1, play.OutsOnPlay);
@@ -130,6 +138,7 @@ public sealed class PlayStringParserTests
         var ok = PlayStringParser.TryParse("FC1/G1.3XH(2);1-2", out var play);
 
         Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
         Assert.AreEqual(PlayEventType.FieldersChoice, play.EventType);
         Assert.AreEqual(1, play.Advance[0]); // batter safe at first on the fielder's choice
         Assert.AreEqual(2, play.Advance[1]); // runner from first to second
@@ -152,5 +161,24 @@ public sealed class PlayStringParserTests
         var ok = PlayStringParser.TryParse("FC1/G1.3XH(2)1-2", out _);
 
         Assert.IsFalse(ok);
+    }
+
+    /// <summary>
+    /// Parsing fills its result as it goes and can fail part-way through - after the event type
+    /// is set and some runners have been advanced - so a failed parse must hand back nothing at
+    /// all rather than a play that looks usable but is missing whatever came after the point of
+    /// failure.
+    /// </summary>
+    [TestMethod]
+    [DataRow("ZZZ", DisplayName = "unrecognized primary event")]
+    [DataRow("FC1/G1.3XH(2)1-2", DisplayName = "missing advance separator, after advances parsed")]
+    [DataRow("S7.2-H;1-3X", DisplayName = "hit, after the event type and both advances are set")]
+    [DataRow("W.2-3;1-2Q", DisplayName = "walk, after one advance is set")]
+    public void TryParse_Failure_YieldsNoPlayAtAll(string playText)
+    {
+        var ok = PlayStringParser.TryParse(playText, out var play);
+
+        Assert.IsFalse(ok);
+        Assert.IsNull(play);
     }
 }

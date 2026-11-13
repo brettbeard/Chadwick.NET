@@ -59,9 +59,38 @@ internal static class TestFixtures
         "play,1,1,h3,??,,63\n" +
         "play,1,1,h4,??,,K\n";
 
-    public static async Task<Game> LoadMiniGameAsync()
+    /// <summary>
+    /// Play text that parses part-way and then fails: the primary event and both runner advances
+    /// are recognized, and the trailing <c>X</c> is not. Under a parser that handed back what it
+    /// had managed to fill in, this would look like an ordinary single.
+    /// </summary>
+    public const string UnparseablePlayText = "S7.2-H;1-3X";
+
+    /// <summary>
+    /// The same game as <see cref="MiniGameEventFileText"/>, with the home team's leadoff home run
+    /// replaced by <see cref="UnparseablePlayText"/>.
+    /// </summary>
+    public static readonly string MiniGameWithUnparseablePlayEventFileText =
+        MiniGameEventFileText.Replace("play,1,1,h1,??,,HR", $"play,1,1,h1,??,,{UnparseablePlayText}");
+
+    /// <summary>
+    /// The same game as <see cref="MiniGameEventFileText"/>, with the home team's first two
+    /// batters walking and the third's play text left unparseable - so that a runner is on base
+    /// for a play whose following play cannot be read, which is what runner-fate lookahead has to
+    /// cope with.
+    /// </summary>
+    public static readonly string MiniGameWithUnparseablePlayAfterRunnersEventFileText =
+        MiniGameEventFileText
+            .Replace("play,1,1,h1,??,,HR", "play,1,1,h1,??,,W")
+            .Replace("play,1,1,h2,??,,8", "play,1,1,h2,??,,W")
+            .Replace("play,1,1,h3,??,,63", $"play,1,1,h3,??,,{UnparseablePlayText}");
+
+    public static async Task<Game> LoadMiniGameAsync() => await LoadGameAsync(MiniGameEventFileText);
+
+    /// <summary>Loads the single game described by <paramref name="eventFileText"/>.</summary>
+    public static async Task<Game> LoadGameAsync(string eventFileText)
     {
-        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(MiniGameEventFileText));
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(eventFileText));
         var games = await ScorebookReader.ReadAllGamesAsync(stream, CancellationToken.None);
         return games[0];
     }

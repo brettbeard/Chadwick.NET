@@ -39,7 +39,8 @@ public sealed class GameIterator
 
     /// <summary>
     /// The parsed play data for <see cref="CurrentEvent"/>, or <see langword="null"/> if there is
-    /// no current event, or the current event is an <c>"NP"</c> ("no play") placeholder.
+    /// no current event, the current event is an <c>"NP"</c> ("no play") placeholder, or the
+    /// current event's play text did not parse (see <see cref="ParseOk"/>).
     /// </summary>
     /// <remarks>
     /// When advancing past an <c>"NP"</c> event, this deliberately retains the previous real
@@ -48,7 +49,16 @@ public sealed class GameIterator
     /// </remarks>
     public ParsedPlay? EventData { get; private set; }
 
-    /// <summary>Whether <see cref="CurrentEvent"/>'s play text parsed successfully.</summary>
+    /// <summary>
+    /// Whether <see cref="CurrentEvent"/>'s play text parsed successfully. <see langword="true"/>
+    /// for an <c>"NP"</c> event, which has no play text to parse.
+    /// </summary>
+    /// <remarks>
+    /// When this is <see langword="false"/>, <see cref="EventData"/> is <see langword="null"/> and
+    /// <see cref="Next"/> throws rather than applying the unparsed play - see its documentation.
+    /// Callers that would rather screen a game up front than handle that exception can run
+    /// <see cref="Validation.GameValidator.Validate"/> first.
+    /// </remarks>
     public bool ParseOk { get; private set; }
 
     /// <summary>The game state as of the current event.</summary>
@@ -102,6 +112,9 @@ public sealed class GameIterator
         {
             State.BatterHand = currentEvent.BatterHandOverride;
             State.PitcherHand = currentEvent.PitcherHandOverride;
+            // A parse failure is recorded rather than thrown here, so that a caller can inspect
+            // the game (or validate it) without having construction blow up; Next() is where
+            // applying an unparsed play would do damage, and where it throws.
             ParseOk = PlayStringParser.TryParse(currentEvent.PlayText, out var parsed);
             EventData = parsed;
         }
@@ -114,13 +127,28 @@ public sealed class GameIterator
     }
 
     /// <summary>Advances the iterator by one event, updating <see cref="State"/> with the outcome of the event just left behind.</summary>
+    /// <exception cref="InvalidOperationException">The iterator is already past the last event.</exception>
+    /// <exception cref="InvalidPlayTextException">
+    /// <see cref="CurrentEvent"/>'s play text did not parse (<see cref="ParseOk"/> is
+    /// <see langword="false"/>), so there is no trustworthy outcome to apply to
+    /// <see cref="State"/>. A partially-parsed play would move some runners and silently lose
+    /// others, leaving every total accumulated afterwards wrong with nothing to show it, so this
+    /// refuses to advance instead. Screen a game with
+    /// <see cref="Validation.GameValidator.Validate"/> to decide up front whether to replay it at
+    /// all - which is what Chadwick's own <c>cwbox</c> does, via <c>cw_game_lint</c>.
+    /// </exception>
     public void Next()
     {
         var currentEvent = CurrentEvent ?? throw new InvalidOperationException("Cannot advance past the end of the game.");
 
         if (currentEvent.PlayText != "NP")
         {
-            State.Update(currentEvent.Batter, EventData!);
+            if (EventData is null)
+            {
+                throw new InvalidPlayTextException(Game.GameId, State.EventCount + 1, currentEvent.PlayText);
+            }
+
+            State.Update(currentEvent.Batter, EventData);
         }
         else
         {
@@ -189,6 +217,12 @@ public sealed class GameIterator
         ParseOk = PlayStringParser.TryParse(nextEvent.PlayText, out var parsed);
         EventData = parsed;
 
+        if (EventData is null)
+        {
+            // Nothing to fix up, and nothing that can be applied: the next Next() call throws.
+            return;
+        }
+
         for (var baseIndex = 1; baseIndex <= 3; baseIndex++)
         {
             if (EventData.Advance[baseIndex] == 0 &&
@@ -216,10 +250,21 @@ public sealed class GameIterator
     }
 
     /// <summary>Computes the eventual "fate" of the runner on <paramref name="baseIndex"/>: 0 if put out, 1-3 the base eventually reached, or 4+ if the runner scores.</summary>
+    /// <exception cref="InvalidPlayTextException">
+    /// <see cref="CurrentEvent"/>'s play text, or that of a later play in the same half-inning,
+    /// did not parse - so the runner's fate is unknown rather than merely unremarkable. (Later
+    /// plays come into it because this looks ahead by replaying them on a copy of the iterator.)
+    /// </exception>
     public int RunnerFate(int baseIndex)
     {
+        if (CurrentEvent is { } current && current.PlayText != "NP" && EventData is null)
+        {
+            throw new InvalidPlayTextException(Game.GameId, State.EventCount + 1, current.PlayText);
+        }
+
         if (EventData is null)
         {
+            // Past the last event, or an "NP" placeholder with no real play before it.
             return 0;
         }
 
@@ -238,7 +283,12 @@ public sealed class GameIterator
         {
             if (simulation.CurrentEvent.PlayText != "NP")
             {
-                fateBase = simulation.EventData!.Advance[fateBase];
+                // Next() above has already parsed this play without applying it, so an
+                // unparseable one has to be caught here rather than deferred to the next advance.
+                var lookaheadPlay = simulation.EventData ?? throw new InvalidPlayTextException(
+                    Game.GameId, simulation.State.EventCount + 1, simulation.CurrentEvent.PlayText);
+
+                fateBase = lookaheadPlay.Advance[fateBase];
                 if (fateBase < 1 || fateBase > 3)
                 {
                     break;
