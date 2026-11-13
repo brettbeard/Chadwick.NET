@@ -1233,7 +1233,15 @@ public static class PlayStringParser
     {
         play.Advance[0] = 1;
 
-        while (state.Sym == '/')
+        // ParseFlag stops a token on '-', '+', '#' and '!' as well as on '/', leaving state.Sym
+        // on that terminator. ParseFlags (used by every other event type) loops until '.' or
+        // '\0' and so steps over such a terminator to reach the advances; this loop, unique in
+        // keying on '/' alone, would otherwise exit with the parser parked on it and fail to
+        // read the advances that follow. So e.g. C/E2/OBS/G2-.3-H (BOS202509030, 2025) did not
+        // parse although the same modifiers parse without advances, and the same advances parse
+        // without the trailing hyphen. Re-entering on one of those terminators is harmless:
+        // ParseFlag steps past it and yields an empty token, which matches nothing below.
+        while (state.Sym is '/' or '-' or '+' or '#' or '!')
         {
             ParseFlag(state);
 
