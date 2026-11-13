@@ -15,6 +15,7 @@
 using Chadwick.Core.Model;
 using Chadwick.Core.Parsing;
 using Chadwick.Core.Simulation;
+using Chadwick.Core.Validation;
 
 namespace Chadwick.Core.Boxscores;
 
@@ -32,10 +33,23 @@ namespace Chadwick.Core.Boxscores;
 /// lines with no play-by-play, read by <c>cw_box_process_boxscore_file</c>) is not yet ported;
 /// <see cref="Create"/> throws if given a game with no events.
 /// </remarks>
+/// <remarks>
+/// A play whose text does not parse has no known outcome, so there is no honest boxscore to
+/// build from a game containing one: <see cref="Create"/> throws
+/// <see cref="InvalidPlayTextException"/> rather than returning totals that are silently off.
+/// Callers processing games in bulk should screen each game with
+/// <see cref="GameValidator.Validate"/> and skip the ones that fail, as Chadwick's <c>cwbox</c>
+/// does via <c>cw_game_lint</c>.
+/// </remarks>
 public static class BoxscoreBuilder
 {
     /// <summary>Builds a boxscore for <paramref name="game"/>.</summary>
     /// <exception cref="NotSupportedException"><paramref name="game"/> has no play-by-play events.</exception>
+    /// <exception cref="InvalidPlayTextException">
+    /// One of <paramref name="game"/>'s plays could not be parsed, so its outcome is unknown and
+    /// no accurate boxscore can be built. Screen games with
+    /// <see cref="GameValidator.Validate"/> to detect this before building.
+    /// </exception>
     public static Boxscore Create(Game game)
     {
         ArgumentNullException.ThrowIfNull(game);
@@ -160,7 +174,14 @@ public static class BoxscoreBuilder
 
             if (gameIterator.CurrentEvent.PlayText != "NP")
             {
-                var play = gameIterator.EventData!;
+                // A play whose text did not parse has no known outcome, and the little of it that
+                // did parse is not a basis for a stat line: accumulating from it would leave the
+                // boxscore off by an unknown amount with nothing in it to show that. The same
+                // check in GameIterator.Next() would catch this at the end of the loop body, but
+                // the per-play accumulators below read EventData first.
+                var play = gameIterator.EventData ?? throw new InvalidPlayTextException(
+                    game.GameId, state.EventCount + 1, gameIterator.CurrentEvent.PlayText);
+
                 BatterStats(boxscore, gameIterator);
                 RunnerStats(boxscore, gameIterator);
                 FielderStats(boxscore, gameIterator);

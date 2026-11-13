@@ -18,6 +18,7 @@ using Chadwick.Core.Parsing;
 using Chadwick.Core.Rosters;
 using Chadwick.Core.Scorebook;
 using Chadwick.Core.Simulation;
+using Chadwick.Core.Validation;
 
 namespace Chadwick.NET.Tests.Integration;
 
@@ -131,6 +132,44 @@ public sealed class SeasonDataTests
                 }
 
                 BoxscoreBuilder.Create(game);
+                totalGames++;
+            }
+        }
+
+        Assert.AreEqual(ExpectedGameCountsBySeason[year], totalGames);
+    }
+
+    /// <summary>
+    /// Every game in these seasons should pass the consistency checks outright: this pins down
+    /// that the validator does not reject otherwise-good real-world play-by-play, since a caller
+    /// (<c>cwbox</c> included) skips the games it flags.
+    /// </summary>
+    [TestMethod]
+    [DynamicData(nameof(AllConfiguredSeasons))]
+    public async Task Season_EveryGamePassesValidation(int year)
+    {
+        var zipPath = FindSeasonZipPath(year);
+        if (zipPath is null)
+        {
+            Assert.Inconclusive($"Sample data 'data/play-by-play/{year}eve.zip' was not found; skipping season regression test.");
+            return;
+        }
+
+        using IRetrosheetFileSource fileSource = new ZipFileSource(zipPath);
+        var fileNames = await fileSource.GetFileNamesAsync(CancellationToken.None);
+        var eventFileNames = fileNames.Where(name => name.EndsWith(".EVN") || name.EndsWith(".EVA")).ToList();
+        Assert.IsNotEmpty(eventFileNames);
+
+        var totalGames = 0;
+        foreach (var eventFileName in eventFileNames)
+        {
+            await using var stream = await fileSource.OpenFileAsync(eventFileName, CancellationToken.None);
+            var games = await ScorebookReader.ReadAllGamesAsync(stream, CancellationToken.None);
+
+            foreach (var game in games)
+            {
+                var problems = GameValidator.Validate(game);
+                Assert.IsEmpty(problems, $"{game.GameId}: {string.Join("; ", problems.Select(p => p.Description))}");
                 totalGames++;
             }
         }

@@ -12,6 +12,7 @@
 // or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License,
 // included in this repository as LICENSE, for more details.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Chadwick.Core.Model;
 
@@ -34,13 +35,35 @@ public static class PlayStringParser
     /// Attempts to parse <paramref name="playText"/> into a structured play.
     /// </summary>
     /// <param name="playText">The play-text portion of a <c>play</c> record (e.g. <c>S7.2-H;1-3</c>).</param>
-    /// <param name="parsedPlay">The parsed play, if parsing succeeded.</param>
+    /// <param name="parsedPlay">
+    /// The parsed play if parsing succeeded; otherwise <see langword="null"/>. Parsing populates
+    /// the play as it goes and can fail part-way through, so a partially-filled play is never
+    /// handed back - a failed parse yields nothing at all rather than something that looks
+    /// usable.
+    /// </param>
     /// <returns><see langword="true"/> if the text was valid play-text; otherwise <see langword="false"/>.</returns>
-    public static bool TryParse(string playText, out ParsedPlay parsedPlay)
+    public static bool TryParse(string playText, [NotNullWhen(true)] out ParsedPlay? parsedPlay)
     {
         ArgumentNullException.ThrowIfNull(playText);
 
-        parsedPlay = new ParsedPlay();
+        var play = new ParsedPlay();
+        if (!TryParseInto(playText, play))
+        {
+            parsedPlay = null;
+            return false;
+        }
+
+        parsedPlay = play;
+        return true;
+    }
+
+    /// <summary>
+    /// Runs the parse into <paramref name="parsedPlay"/>, which it populates incrementally and
+    /// leaves partially written if parsing fails - hence private, with <see cref="TryParse"/>
+    /// discarding it on failure.
+    /// </summary>
+    private static bool TryParseInto(string playText, ParsedPlay parsedPlay)
+    {
         var state = new ParserState(playText);
 
         ParsePrimaryEvent(state);

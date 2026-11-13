@@ -35,8 +35,10 @@ the full text.
 
 - **`Chadwick.NET`** - class library: Retrosheet file parsing (tokenizer,
   roster/team files, event files, play-text parser), the domain model, game-state
-  simulation, and boxscore accumulation. No console- or UI-specific code, so it's
-  usable from any front end.
+  simulation, boxscore accumulation, and game consistency validation (a port of
+  Chadwick's `lint.c`, which `cwbox` uses to skip games whose play-by-play does
+  not hold together). No console- or UI-specific code, so it's usable from any
+  front end.
 - **`Chadwick.NET.Cwbox`** - console application: CLI plus the plaintext boxscore
   renderer.
 - **`Chadwick.NET.Tests`** - MSTest unit and integration tests.
