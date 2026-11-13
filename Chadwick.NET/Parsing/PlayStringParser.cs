@@ -498,6 +498,24 @@ public static class PlayStringParser
             {
                 // silently accept interference flag
             }
+            else if (state.Token == "SB")
+            {
+                // A stolen base credited on some other primary event. Retrosheet has scored this
+                // once, on a balk in 2025 (KCA202506140: BK.2-3(SB3);1-2), which makes a steal
+                // grammatically legal in the advancement part of any play - the same reasoning
+                // and the same handling as Chadwick's own parser.
+                if (baseFrom is >= 1 and <= 3)
+                {
+                    play.SbFlag[baseFrom] = true;
+                }
+
+                // The base stolen, where stated: '2' or '3', or '4' for home - "SBH" having been
+                // rewritten to "SB4" before parsing - with a bare 'H' tolerated as well.
+                if (state.Sym is (>= '2' and <= '4') or 'H')
+                {
+                    state.NextSym();
+                }
+            }
             else
             {
                 return ParseInvalid(state);

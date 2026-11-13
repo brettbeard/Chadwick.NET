@@ -146,6 +146,69 @@ public sealed class PlayStringParserTests
         Assert.AreEqual(1, play.OutsOnPlay);
     }
 
+    /// <summary>
+    /// Retrosheet has credited a stolen base on a balk once, in 2025, which makes a steal
+    /// grammatically legal in the advancement part of any play. Chadwick's own parser accepts it
+    /// on that basis, so this port has to as well.
+    /// </summary>
+    [TestMethod]
+    public void TryParse_StolenBaseAnnotationOnAnAdvance_CreditsTheStealAndKeepsTheAdvances()
+    {
+        // KCA202506140: a balk on which the runner from second was credited with stealing third.
+        var ok = PlayStringParser.TryParse("BK.2-3(SB3);1-2", out var play);
+
+        Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
+        Assert.AreEqual(PlayEventType.Balk, play.EventType);
+        Assert.IsTrue(play.SbFlag[2]);
+        Assert.AreEqual(3, play.Advance[2]);
+        Assert.AreEqual(2, play.Advance[1]); // the advance after the annotated one still parses
+        Assert.IsFalse(play.SbFlag[1]);
+    }
+
+    [TestMethod]
+    [DataRow("W.2-3(SB3)", DisplayName = "walk")]
+    [DataRow("S7.2-3(SB3)", DisplayName = "single")]
+    [DataRow("E6/G6.2-3(SB3)", DisplayName = "error")]
+    [DataRow("BK.2-3(SB)", DisplayName = "balk, with the base left unstated")]
+    public void TryParse_StolenBaseAnnotation_IsAcceptedWhateverTheEvent(string playText)
+    {
+        var ok = PlayStringParser.TryParse(playText, out var play);
+
+        Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
+        Assert.IsTrue(play.SbFlag[2]);
+        Assert.AreEqual(3, play.Advance[2]);
+    }
+
+    [TestMethod]
+    [DataRow("BK.3-H(SBH)", DisplayName = "SBH")]
+    [DataRow("BK.3-H(SB4)", DisplayName = "SB4, the form SBH is rewritten to before parsing")]
+    public void TryParse_StolenBaseAnnotationOfHome_CreditsTheRunnerFromThird(string playText)
+    {
+        var ok = PlayStringParser.TryParse(playText, out var play);
+
+        Assert.IsTrue(ok);
+        Assert.IsNotNull(play);
+        Assert.IsTrue(play.SbFlag[3]);
+        Assert.AreEqual(4, play.Advance[3]);
+    }
+
+    /// <summary>
+    /// Accepting the annotation must not amount to accepting anything that starts with
+    /// <c>SB</c>: only a base that can actually be stolen, as Chadwick's parser has it.
+    /// </summary>
+    [TestMethod]
+    [DataRow("BK.2-3(SB5)", DisplayName = "a base that cannot be stolen")]
+    [DataRow("BK.2-3(SBX)", DisplayName = "not a base at all")]
+    public void TryParse_StolenBaseAnnotationWithABogusBase_ReturnsFalse(string playText)
+    {
+        var ok = PlayStringParser.TryParse(playText, out var play);
+
+        Assert.IsFalse(ok);
+        Assert.IsNull(play);
+    }
+
     [TestMethod]
     public void TryParse_UnrecognizedToken_ReturnsFalse()
     {
