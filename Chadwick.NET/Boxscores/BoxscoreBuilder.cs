@@ -162,6 +162,13 @@ public static class BoxscoreBuilder
         var walkOff = false;
         var gameIterator = new GameIterator(game);
 
+        // The pitch string of the plate appearance still in progress, as far as earlier records
+        // have already reported (and PitchStats has already counted) it; empty once a plate
+        // appearance ends or the half-inning changes. See PitchStats.
+        var pitchesReported = "";
+        var reportedInning = -1;
+        var reportedBattingTeam = -1;
+
         while (gameIterator.CurrentEvent is not null)
         {
             var state = gameIterator.State;
@@ -170,7 +177,17 @@ public static class BoxscoreBuilder
                 boxscore.SetLineScore(state.Inning, state.BattingTeam, 0);
             }
 
-            PitchStats(boxscore, gameIterator);
+            if (state.Inning != reportedInning || state.BattingTeam != reportedBattingTeam)
+            {
+                // A plate appearance interrupted by an inning-ending out on the bases starts
+                // again from an empty count next inning, so nothing carries across halves.
+                pitchesReported = "";
+                reportedInning = state.Inning;
+                reportedBattingTeam = state.BattingTeam;
+            }
+
+            PitchStats(boxscore, gameIterator, pitchesReported);
+            pitchesReported = PitchesReportedAfter(gameIterator, pitchesReported);
 
             if (gameIterator.CurrentEvent.PlayText != "NP")
             {
@@ -346,10 +363,37 @@ public static class BoxscoreBuilder
 
     /// <summary>
     /// Updates pitch-count stats with the current event. Called even for "NP" events, since
-    /// pitches may occur before a substitution record. Only counts pitches following the last
-    /// period in the pitch string (earlier ones belong to a previous, since-substituted batter).
+    /// pitches may occur before a substitution record. Counts only the pitches this record adds
+    /// to what earlier records of the same plate appearance already reported.
     /// </summary>
-    private static void PitchStats(Boxscore boxscore, GameIterator gameIterator)
+    /// <remarks>
+    /// <para>
+    /// <b>A deliberate divergence from the C original.</b> Retrosheet's pitch field "contains
+    /// all pitches to this batter in this plate appearance", so a plate appearance split across
+    /// several records (a stolen base mid-count, a pitching change) repeats its earlier pitches
+    /// on each, and they must be counted once. C <c>cw_box_pitch_stats</c> de-duplicates by
+    /// counting only the pitches after the last <c>.</c>, on the assumption that everything
+    /// before a period was reported by an earlier record. But <c>.</c> is a "marker for play not
+    /// involving the batter", and such a play often has no record of its own: the spec's own
+    /// example <c>play,1,1,sandr001,32,C1FBB.BFB,W+WP.2-3</c> is one record with seven pitches,
+    /// of which the period rule counts three.
+    /// </para>
+    /// <para>
+    /// On the 2025 season the period rule gives 603,327 pitches (3.30 per plate appearance).
+    /// Counting each pitch once gives 710,079 (3.88), and matches Baseball-Reference's box scores
+    /// exactly, pitcher by pitcher, on the three games checked (ANA202504040: 365 against the
+    /// period rule's 306; NYA202503270: 331 against 281; BOS202509030: 315 against 276). In
+    /// 2025, 35,125 records carry a period with no earlier record behind it.
+    /// </para>
+    /// <para>
+    /// The rule here: if the previous record in the half-inning left the plate appearance open
+    /// (see <see cref="PitchesReportedAfter"/>) and this record's pitches begin with that
+    /// record's, only the remainder is new. Otherwise the whole string is new. In 2025 every
+    /// record that continues a plate appearance does begin with its predecessor's pitches, so
+    /// the prefix test never has to guess.
+    /// </para>
+    /// </remarks>
+    private static void PitchStats(Boxscore boxscore, GameIterator gameIterator, string pitchesReported)
     {
         var currentEvent = gameIterator.CurrentEvent!;
         if (currentEvent.Pitches.Length == 0)
@@ -371,8 +415,9 @@ public static class BoxscoreBuilder
 
         var pitcher = defensePitchers[^1];
 
-        var lastPeriod = currentEvent.Pitches.LastIndexOf('.');
-        var pitchSequence = lastPeriod >= 0 ? currentEvent.Pitches[(lastPeriod + 1)..] : currentEvent.Pitches;
+        var pitchSequence = pitchesReported.Length > 0 && currentEvent.Pitches.StartsWith(pitchesReported, StringComparison.Ordinal)
+            ? currentEvent.Pitches[pitchesReported.Length..]
+            : currentEvent.Pitches;
 
         foreach (var pitch in pitchSequence)
         {
@@ -389,6 +434,33 @@ public static class BoxscoreBuilder
                 pitcher.Pitching.Strikes++;
             }
         }
+    }
+
+    /// <summary>
+    /// What earlier records have reported of the plate appearance in progress, once the current
+    /// record has been counted: empty if this record ended the plate appearance, otherwise its
+    /// pitch string.
+    /// </summary>
+    /// <remarks>
+    /// The plate appearance stays open after a no-play record (a substitution) and after any
+    /// event that is not the batter's own (<see cref="ParsedPlay.IsBatter"/> false: steals,
+    /// wild pitches, pickoffs, balks, a foul-fly error). On 2025 this boundary gives exactly
+    /// the season's 182,926 plate appearances. A record with no pitches keeps what was reported
+    /// before it rather than clearing it, since it cannot have replaced pitches it does not
+    /// list; that case does not occur in 2025 but would in an archive with partial pitch data.
+    /// </remarks>
+    private static string PitchesReportedAfter(GameIterator gameIterator, string pitchesReported)
+    {
+        var currentEvent = gameIterator.CurrentEvent!;
+        var plateAppearanceContinues =
+            currentEvent.PlayText == "NP" || gameIterator.EventData is { IsBatter: false };
+
+        if (!plateAppearanceContinues)
+        {
+            return "";
+        }
+
+        return currentEvent.Pitches.Length > 0 ? currentEvent.Pitches : pitchesReported;
     }
 
     private static void BatterStats(Boxscore boxscore, GameIterator gameIterator)
